@@ -1,4 +1,5 @@
 import socket
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def scan_port(host: str, port: int, timeout: float = 0.5) -> bool:
     """Return True when a TCP connection to the port succeeds."""
@@ -45,35 +46,49 @@ def main() -> None:
         print(f"Could not resolve host: {host}")
         return
 
-    print(f"\nScanning {host} ({target_ip})")
-    print(f"Ports {start_port}-{end_port}\n")
-
     open_ports: list[int] = []
 
     total_ports = end_port - start_port + 1
+    worker_count = min(100, total_ports)
+
+    print(f"\nScanning {host} ({target_ip})")
+    print(f"Ports {start_port}-{end_port}")
+    print(f"Workers: {worker_count}\n")
 
     try:
-        for scanned_count, port in enumerate(
-            range(start_port, end_port + 1),
-            start=1,
-        ):
-            is_open = scan_port(target_ip, port)
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_to_port = {
+                executor.submit(scan_port, target_ip, port): port
+                for port in range(start_port, end_port + 1)
+            }
 
-            print(
-                f"\rScanned {scanned_count}/{total_ports} ports",
-                end="",
-                flush=True,
-            )
-
-            if is_open:
-                open_ports.append(port)
+            for scanned_count, future in enumerate(
+                as_completed(future_to_port),
+                start=1,
+            ):
+                port = future_to_port[future]
 
                 try:
-                    service = socket.getservbyport(port, "tcp")
-                except OSError:
-                    service = "Unknown"
+                    is_open = future.result()
+                except Exception as error:
+                    print(f"\nError scanning port {port}: {error}")
+                    continue
 
-                print(f"\n[OPEN] {port}/tcp - {service}")
+                print(
+                    f"\rScanned {scanned_count}/{total_ports} ports",
+                    end = "",
+                    flush = True,
+                )
+
+                if is_open:
+                    open_ports.append(port)
+
+                    try:
+                        service = socket.getservbyport(port)
+                    except OSError:
+                        service = "Unknown"
+
+                    print(f"\n[OPEN] {port}/tcp - {service}")
 
     except KeyboardInterrupt:
         print("\nScan cancelled.")
