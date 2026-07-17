@@ -1,4 +1,5 @@
 import socket
+import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def scan_port(host: str, port: int, timeout: float = 0.5) -> bool:
@@ -13,20 +14,55 @@ def scan_port(host: str, port: int, timeout: float = 0.5) -> bool:
         print(f"\nNetwork error while scanning port {port}: {error}")
         return False
 
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Scan a target for open TCP ports."
+    )
+    parser.add_argument(
+        "host",
+        help="Hostname or IPv4 address to scan.",
+    )
+    parser.add_argument(
+        "-s",
+        "--start-port",
+        type=int,
+        default=1,
+        help="First port to scan (default: 1).",
+    )
+    parser.add_argument(
+        "-e",
+        "--end-port",
+        type=int,
+        default=65535,
+        help="Last port to scan (default: 65535).",
+    )
+    parser.add_argument(
+        "-w",
+        "--workers",
+        type=int,
+        default=100,
+        help="Max number of workers (default: 100).",
+    )
+    parser.add_argument(
+        "-t",
+        "--timeout",
+        type=float,
+        default=0.5,
+        help="Timeout in seconds for each port scan (default: 0.5).",
+    )
+
+    return parser.parse_args()
+
 
 def main() -> None:
-    host = input("Target host: ").strip()
+    
+    args = parse_arguments()
 
-    if not host:
-        print("A target host is required.")
-        return
-
-    try:
-        start_port = int(input("Start port: "))
-        end_port = int(input("End port: "))
-    except ValueError:
-        print("Ports must be numbers.")
-        return
+    host = args.host
+    start_port = args.start_port
+    end_port = args.end_port
+    workers = args.workers
+    timeout = args.timeout
 
     if not 1 <= start_port <= 65535:
         print("Start port must be between 1 and 65535.")
@@ -39,6 +75,17 @@ def main() -> None:
     if start_port > end_port:
         print("Start port cannot be greater than end port.")
         return
+    
+    if workers < 1:
+        print("Number of workers must be at least 1.")
+        return
+    
+    if timeout <= 0:
+        print("Timeout must be a positive number.")
+        return
+    
+    if workers > 500:
+        print("Worker count may not exceed 500.")
 
     try:
         target_ip = socket.gethostbyname(host)
@@ -49,7 +96,7 @@ def main() -> None:
     open_ports: list[int] = []
 
     total_ports = end_port - start_port + 1
-    worker_count = min(100, total_ports)
+    worker_count = min(workers, total_ports)
 
     print(f"\nScanning {host} ({target_ip})")
     print(f"Ports {start_port}-{end_port}")
@@ -58,7 +105,7 @@ def main() -> None:
     try:
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
             future_to_port = {
-                executor.submit(scan_port, target_ip, port): port
+                executor.submit(scan_port, target_ip, port, timeout): port
                 for port in range(start_port, end_port + 1)
             }
 
