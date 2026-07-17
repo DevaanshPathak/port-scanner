@@ -16,7 +16,7 @@ def scan_port(host: str, port:int, timeout: float=0.5) -> bool:
         return False
     
 def main() -> None:
-    host = input("Target host: ".strip())
+    host = input("Target host: ").strip()
 
     if not host:
         print("A target host is required.")
@@ -62,7 +62,7 @@ def main() -> None:
                 except OSError:
                     service = "Unknown"
 
-                print("[OPEN] ", [port],"/tcp - ", service)
+                print("[OPEN] ", port, "/tcp - ", service)
 
 
     except KeyboardInterrupt:
